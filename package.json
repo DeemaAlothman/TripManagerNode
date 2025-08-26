@@ -3,10 +3,35 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "nodemon index.js",
+    "start": "node index.js",
+    "prisma:init": "prisma init",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev --name init",
+    "prisma:studio": "prisma studio"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": ""
+  "description": "\"# TripManager\"",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/adnanmouslli/TripManager.git"
+  },
+  "bugs": {
+    "url": "https://github.com/adnanmouslli/TripManager/issues"
+  },
+  "homepage": "https://github.com/adnanmouslli/TripManager#readme",
+  "dependencies": {
+    "@prisma/client": "^6.14.0",
+    "bcryptjs": "^3.0.2",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.1",
+    "express": "^5.1.0",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "nodemon": "^3.1.4",
+    "prisma": "^6.14.0"
+  }
 }

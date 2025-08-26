@@ -1,0 +1,154 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  admin
+  booking
+  security
+  ops
+}
+
+enum TripStatus {
+  scheduled
+  boarding
+  departed
+  canceled
+  completed
+}
+
+enum SeatStatus {
+  available
+  held
+  reserved
+  blocked
+}
+
+enum Gender {
+  M
+  F
+}
+
+enum ScanMethod {
+  manual
+  qr
+  nfc
+  other
+}
+
+model User {
+  id            BigInt       @id @default(autoincrement())
+  name          String       @db.VarChar(120)
+  phone         String?      @db.VarChar(40)
+  role          UserRole
+  passwordHash  String?      @db.VarChar(255)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  refreshTokens String[]     @default([])
+  trips         Trip[]        @relation("TripCreator")
+  reservations  Reservation[] @relation("ReservationCreator")
+  securityLogs  SecurityLog[] @relation("LogRecorder")
+}
+
+model BusType {
+  id         Int      @id @default(autoincrement())
+  name       String   @db.VarChar(80)
+  seatCount  Int
+  seats      Seat[]
+  trips      Trip[]
+}
+
+model Seat {
+  id            Int       @id @default(autoincrement())
+  busTypeId     Int
+  busType       BusType   @relation(fields: [busTypeId], references: [id])
+  row           Int
+  col           Int
+  tripSeats     TripSeat[]
+  reservations  Reservation[]
+
+  @@unique([busTypeId, row, col])
+}
+
+model Trip {
+  id               BigInt      @id @default(autoincrement())
+  busTypeId        Int
+  busType          BusType     @relation(fields: [busTypeId], references: [id])
+  departureDt      DateTime
+  originLabel      String?     @db.VarChar(120)
+  destinationLabel String?     @db.VarChar(120)
+  durationMinutes  Int?
+  driverName       String?     @db.VarChar(120)
+  status           TripStatus  @default(scheduled)
+  createdBy        BigInt
+  creator          User        @relation("TripCreator", fields: [createdBy], references: [id])
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  tripSeats     TripSeat[]
+  reservations  Reservation[]
+  securityLogs  SecurityLog[]
+}
+
+model TripSeat {
+  tripId  BigInt
+  seatId  Int
+  trip    Trip       @relation(fields: [tripId], references: [id])
+  seat    Seat       @relation(fields: [seatId], references: [id])
+  status  SeatStatus @default(available)
+
+  @@id([tripId, seatId])
+}
+
+model Reservation {
+  id            BigInt    @id @default(autoincrement())
+  tripId        BigInt
+  trip          Trip      @relation(fields: [tripId], references: [id])
+  seatId        Int
+  seat          Seat      @relation(fields: [seatId], references: [id])
+  passengerName String    @db.VarChar(120)
+  phone         String?   @db.VarChar(40)
+  boardingPoint String?   @db.VarChar(120)
+  notes         String?   @db.VarChar(255)
+  paid          Boolean   @default(false)
+  amount        Decimal  
+  createdBy     BigInt
+  creator       User      @relation("ReservationCreator", fields: [createdBy], references: [id])
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  securityLogs  SecurityLog[]
+}
+
+model SecurityLog {
+  id            BigInt      @id @default(autoincrement())
+  tripId        BigInt
+  trip          Trip        @relation(fields: [tripId], references: [id])
+  reservationId BigInt?
+  reservation   Reservation? @relation(fields: [reservationId], references: [id])
+
+  nationalId    String      @db.VarChar(20)
+  firstName     String      @db.VarChar(60)
+  lastName      String      @db.VarChar(60)
+  fatherName    String?     @db.VarChar(60)
+  motherName    String?     @db.VarChar(60)
+  birthDate     DateTime?   @db.Date
+  gender        Gender
+  issuePlace    String?     @db.VarChar(80)
+  phone         String?     @db.VarChar(40)
+  scanMethod    ScanMethod  @default(manual)
+  notes         String?     @db.VarChar(255)
+  recordedAt    DateTime    @default(now())
+  recordedBy    BigInt
+  recorder      User        @relation("LogRecorder", fields: [recordedBy], references: [id])
+
+  @@index([tripId, recordedAt])
+  @@index([reservationId])
+}
