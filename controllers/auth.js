@@ -105,7 +105,7 @@ async function refresh(req, res) {
     const newAccessToken = jwt.sign(
       { id: user.id.toString(), role: user.role }, // تحويل id إلى string
       process.env.JWT_ACCESS_SECRET,
-      { expiresIn: process.env.ACCESS_TOKEN_EXPIRY || "15m" }
+      { expiresIn: process.env.ACCESS_TOKEN_EXPIRY || "60m" }
     );
     res.json({
       message: "Token refreshed successfully",
