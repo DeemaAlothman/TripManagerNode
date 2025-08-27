@@ -23,9 +23,10 @@ app.use("/api/auth", authRoutes);
 
 app.use("/api/admin", require("./routes/admin"));
 
-// // users (لو عندك)
-// app.use("/api/users", require("./routes/users"));
+// users (لو عندك)
+app.use("/api/users", require("./routes/users"));
 
+app.use("/api/booking", require("./routes/booking"));
 
 app.listen(3000, () =>
   console.log("Server running on port 3000 at", new Date().toISOString())
