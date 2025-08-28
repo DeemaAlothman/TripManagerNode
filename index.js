@@ -2,6 +2,7 @@ const express = require("express");
 const dotenv = require("dotenv");
 const authRoutes = require("./routes/auth");
 const helmet = require("helmet");
+const securityRoutes = require("./routes/securityRoutes");
 
 dotenv.config();
 
@@ -27,6 +28,14 @@ app.use("/api/admin", require("./routes/admin"));
 app.use("/api/users", require("./routes/users"));
 
 app.use("/api/booking", require("./routes/booking"));
+
+app.use("/api/security", securityRoutes);
+
+app.use("/api/ops", require("./routes/ops"));
+
+
+
+
 
 app.listen(3000, () =>
   console.log("Server running on port 3000 at", new Date().toISOString())
