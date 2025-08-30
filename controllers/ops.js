@@ -68,37 +68,94 @@ async function createTrip(req, res) {
 async function updateTrip(req, res) {
   try {
     const tripId = toId(req.params.tripId);
+
+    // نقبل كلا الاسمين: departureTime (سلسلة ISO) أو departureDt
     const {
-      originLabel,
-      destinationLabel,
-      driverName,
-      departureTime,
       busTypeId,
-      status,
+      departureTime,     // مثال: "2025-09-01T08:30:00Z"
+      departureDt,       // بديل: إما Date أو String
+      originLabel,       // String أو null لمسح القيمة
+      destinationLabel,  // String أو null لمسح القيمة
+      durationMinutes,   // Int أو null
+      driverName,        // String أو null
+      status,            // one of: scheduled|boarding|departed|canceled|completed
     } = req.body;
 
-    const data = {};
-    if (originLabel !== undefined) data.originLabel = originLabel;
-    if (destinationLabel !== undefined)
-      data.destinationLabel = destinationLabel;
-    if (driverName !== undefined) data.driverName = driverName;
-    if (departureTime !== undefined) data.departureDt = new Date(departureTime);
-    if (status !== undefined) data.status = status;
+    // تأكد أن الرحلة موجودة
+    const existsTrip = await prisma.trip.findUnique({
+      where: { id: tripId },
+      select: { id: true },
+    });
+    if (!existsTrip) return res.status(404).json({ message: "Trip not found" });
 
-    if (busTypeId !== undefined) {
-      const bt = await prisma.busType.findUnique({
-        where: { id: Number(busTypeId) },
-      });
+    const data = {};
+
+    // تغيير نوع الباص
+    if (Object.prototype.hasOwnProperty.call(req.body, "busTypeId")) {
+      const btId = Number(busTypeId);
+      if (!Number.isInteger(btId) || btId <= 0) {
+        return res.status(400).json({ message: "Invalid busTypeId" });
+      }
+      const bt = await prisma.busType.findUnique({ where: { id: btId } });
       if (!bt) return res.status(404).json({ message: "Bus type not found" });
-      data.busType = { connect: { id: Number(busTypeId) } };
+      // بما أن العلاقة معرفة بـ fields: [busTypeId] نحدّث الـ scalar مباشرة:
+      data.busTypeId = btId;
     }
 
-    const updated = await prisma.trip.update({ where: { id: tripId }, data });
+    // تغيير وقت الانطلاق
+    if (
+      Object.prototype.hasOwnProperty.call(req.body, "departureTime") ||
+      Object.prototype.hasOwnProperty.call(req.body, "departureDt")
+    ) {
+      const raw = departureTime ?? departureDt;
+      const dt = raw instanceof Date ? raw : new Date(raw);
+      if (isNaN(dt)) {
+        return res.status(400).json({ message: "Invalid departure datetime" });
+      }
+      data.departureDt = dt;
+    }
+
+    // الحقول النصية (ندعم التعيين إلى null لمسحها)
+    if (Object.prototype.hasOwnProperty.call(req.body, "originLabel")) {
+      data.originLabel = originLabel ?? null;
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, "destinationLabel")) {
+      data.destinationLabel = destinationLabel ?? null;
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, "driverName")) {
+      data.driverName = driverName ?? null;
+    }
+
+    // مدة الرحلة
+    if (Object.prototype.hasOwnProperty.call(req.body, "durationMinutes")) {
+      if (durationMinutes === null) {
+        data.durationMinutes = null;
+      } else {
+        const dur = Number(durationMinutes);
+        if (!Number.isInteger(dur) || dur < 0) {
+          return res.status(400).json({ message: "Invalid durationMinutes" });
+        }
+        data.durationMinutes = dur;
+      }
+    }
+
+    // الحالة
+    if (Object.prototype.hasOwnProperty.call(req.body, "status")) {
+      const allowed = ["scheduled", "boarding", "departed", "canceled", "completed"];
+      if (!allowed.includes(status)) {
+        return res.status(400).json({ message: "Invalid status value" });
+      }
+      data.status = status;
+    }
+
+    const updated = await prisma.trip.update({
+      where: { id: tripId },
+      data,
+    });
+
     res.json(toJSON(updated));
   } catch (e) {
-    res
-      .status(500)
-      .json({ message: "Failed to update trip", error: e.message });
+    res.status(500).json({ message: "Failed to update trip", error: e.message });
   }
 }
 
@@ -244,7 +301,7 @@ const fonts = {
 
 // GET /api/ops/trips/:tripId/report.pdf
 const printer = new PdfPrinter(fonts);
-//  async function generateTripReportPDF(req, res) {
+
 //   try {
 //     const { tripId, userId } = req.body;
 
@@ -558,6 +615,98 @@ async function generateTripReportPDF(req, res) {
 }
 
 
+
+// GET /api/ops/trips/:tripId/reservations/:reservationId/ticket.pdf
+async function generateReservationTicketPDF(req, res) {
+  try {
+    const rawTripId = req.params.tripId;
+    const rawReservationId = req.params.reservationId;
+    if (!rawTripId || !rawReservationId) {
+      return res.status(400).json({ error: "tripId and reservationId are required in route params" });
+    }
+
+    let tripId, reservationId;
+    try { tripId = BigInt(rawTripId); } catch { return res.status(400).json({ error: "Invalid tripId" }); }
+    try { reservationId = BigInt(rawReservationId); } catch { return res.status(400).json({ error: "Invalid reservationId" }); }
+
+    const reservation = await prisma.reservation.findFirst({
+      where: { id: reservationId, trip: { id: tripId } },
+      include: {
+        seat: { select: { id: true, row: true, col: true } },
+        trip: {
+          select: { originLabel: true, destinationLabel: true, driverName: true, departureDt: true },
+        },
+      },
+    });
+    if (!reservation) return res.status(404).json({ error: "Reservation not found for this trip" });
+
+    const depStr = reservation.trip?.departureDt
+      ? new Date(reservation.trip.departureDt).toLocaleString("ar-SY")
+      : "غير محدد";
+
+    const seatLabel = reservation.seat
+      ? (reservation.seat.row != null && reservation.seat.col != null
+          ? `صف ${reservation.seat.row} - كرسي ${reservation.seat.col}`
+          : `مقعد #${reservation.seat.id}`)
+      : "بدون مقعد محدد";
+
+    const paidText = reservation.paid ? "مدفوع" : "غير مدفوع";
+    const amountText = typeof reservation.amount === "number"
+      ? reservation.amount
+      : Number(reservation.amount || 0);
+
+    const docDefinition = {
+      content: [
+        { text: "رحلة تذكرة", style: "header", alignment: "center" },
+        { text: "\n" },
+        {
+          table: {
+            widths: ["*", "*"],
+            body: [
+              [{ text: "البيان", bold: true, alignment: "center" }, { text: "القيمة", bold: true, alignment: "center" }],
+              ["الراكب اسم", reservation.passengerName || "غير محدد"],
+              ["الهاتف", reservation.phone || "غير محدد"],
+              ["من", reservation.trip?.originLabel || "غير محدد"],
+              ["إلى", reservation.trip?.destinationLabel || "غير محدد"],
+              ["تاريخ/الرحلة وقت", depStr],
+              ["المقعد", seatLabel],
+              ["الصعود مكان ", reservation.boardingPoint || "غير محدد"],
+              ["المبلغ", `${amountText}`],
+              ["الدفع حالة", paidText],
+              ["ملاحظات", reservation.notes || "—"],
+              ["الحجز رقم", reservation.id.toString()],
+            ],
+          },
+          layout: "lightHorizontalLines",
+          margin: [0, 0, 0, 10],
+        },
+        {
+          columns: [
+            { text: "—", alignment: "right" },
+            { qr: `TRIP:${rawTripId}|RES:${rawReservationId}|PN:${reservation.passengerName || ""}`, fit: 100, alignment: "left" },
+          ],
+        },
+        { text: "\n" },
+        { text: `السائق: ${reservation.trip?.driverName || "غير محدد"}`, alignment: "right" },
+      ],
+      defaultStyle: { font: "Arabic", fontSize: 12 },
+      styles: { header: { fontSize: 18, bold: true } },
+      pageMargins: [30, 30, 30, 30],
+    };
+
+    const pdfDoc = printer.createPdfKitDocument(docDefinition);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="ticket_trip_${rawTripId}_res_${rawReservationId}.pdf"`);
+    pdfDoc.pipe(res);
+    pdfDoc.end();
+  } catch (err) {
+    console.error("Error generating reservation ticket PDF:", err);
+    res.status(500).json({ error: "Failed to generate reservation ticket PDF" });
+  }
+}
+
+
+
 module.exports = {
   createTrip,
   updateTrip,
@@ -566,5 +715,6 @@ module.exports = {
   getTripPaymentsSummary,
   addPassenger,
   generateTripReportPDF,
+  generateReservationTicketPDF,
 };
 

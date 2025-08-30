@@ -1,39 +1,33 @@
-// routes/ops.js
+
 const express = require("express");
 const router = express.Router();
 
-const {
-  createTrip,
-  updateTrip,
-  deleteTrip,
-  getTripPassengers,
-  getTripPaymentsSummary,
-  addPassenger,
-  generateTripReportPDF,
-} = require("../controllers/ops");
-
+const ops = require("../controllers/ops");
 const {
   verifyAccessToken,
   checkRole,
 } = require("../controllers/middleware/auth");
 
-// حماية جميع مسارات متسيّر الرحلات
+/** 🔓 عام: طباعة تذكرة (بدون توكن) */
+router.get(
+  "/trips/:tripId/reservations/:reservationId/ticket.pdf",
+  ops.generateReservationTicketPDF
+);
+
+/** 🔐 كل ما بعده يحتاج توكن ودور ops/admin */
 router.use(verifyAccessToken, checkRole(["ops", "admin"]));
 
-// رحلات
-router.post("/trips", createTrip);
-router.patch("/trips/:tripId", updateTrip);
-router.delete("/trips/:tripId", deleteTrip);
+router.post("/trips", ops.createTrip);
+router.patch("/trips/:tripId", ops.updateTrip);
+router.delete("/trips/:tripId", ops.deleteTrip);
 
-// ركاب الرحلة وملخص المدفوعات
-router.get("/trips/:tripId/passengers", getTripPassengers);
-router.get("/trips/:tripId/payments-summary", getTripPaymentsSummary);
+router.get("/trips/:tripId/passengers", ops.getTripPassengers);
+router.get("/trips/:tripId/payments-summary", ops.getTripPaymentsSummary);
+router.get("/trips/:tripId/report.pdf", ops.generateTripReportPDF);
 
-// إضافة راكب (اسم فقط، بدون دفع/صعود)
-router.post("/trips/:tripId/passengers", addPassenger);
+/** ✅ السطر المطلوب: إضافة راكب (اسم فقط، بدون دفع/صعود) */
+router.post("/trips/:tripId/passengers", ops.addPassenger);
 
-// تقرير PDF
-
-router.get("/trips/:tripId/report.pdf", generateTripReportPDF);
+module.exports = router;
 
 module.exports = router;
