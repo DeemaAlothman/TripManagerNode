@@ -115,6 +115,44 @@ async function resetPassword(req, res) {
       .status(500)
       .json({ message: "Error resetting password", error: e.message });
   }
+
+}
+async function deleteUser(req, res) {
+  try {
+    const id = BigInt(req.params.id);
+
+    const exists = await prisma.user.findUnique({ where: { id } });
+    if (!exists) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // تحقق من الرحلات
+    const trips = await prisma.trip.count({ where: { createdBy: id } });
+    if (trips > 0) {
+      return res.status(400).json({
+        message: "لا يمكن حذف هذا المستخدم لأنه مربوط برحلات",
+        tripsCount: trips,
+      });
+    }
+
+    // تحقق من سجلات الأمان
+    const logs = await prisma.securityLog.count({ where: { recordedBy: id } });
+    if (logs > 0) {
+      return res.status(400).json({
+        message: "لا يمكن حذف هذا المستخدم لأنه مربوط بسجلات أمان",
+        logsCount: logs,
+      });
+    }
+
+    // الحذف النهائي
+    await prisma.user.delete({ where: { id } });
+    return res.json({ message: "User deleted successfully" });
+  } catch (e) {
+    console.error("Delete user error:", e);
+    return res
+      .status(500)
+      .json({ message: "Error deleting user", error: e.message });
+  }
 }
 
 module.exports = {
@@ -123,4 +161,5 @@ module.exports = {
   getUser,
   updateUser,
   resetPassword,
+  deleteUser,
 };
