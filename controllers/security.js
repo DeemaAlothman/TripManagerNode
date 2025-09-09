@@ -189,7 +189,7 @@ async function deleteSecurityLog(req, res) {
 
 // GET /api/security/logs?tripId=1&date=2025-08-27
 // يعرض السجلات مع فلترة حسب الرحلة واليوم (اختياريين)
-async function listSecurityLogs(req, res) {
+async function listSecurityLoging(req, res) {
   try {
     const { tripId, date } = req.query;
     const where = {};
@@ -227,10 +227,24 @@ async function listSecurityLogs(req, res) {
       .json({ message: "Failed to fetch security logs", error: e.message });
   }
 }
+async function getSecurityLoging(req, res) {
+  try {
+    const id = BigInt(req.params.id);
+    const log = await prisma.securityLog.findUnique({ where: { id } });
+    if (!log) return res.status(404).json({ message: "Not found" });
+    res.json(toJSON(log));
+  } catch (e) {
+    res
+      .status(500)
+      .json({ message: "Error fetching security log", error: e.message });
+  }
+}
+
 
 module.exports = {
   createSecurityLog,
   updateSecurityLog,
   deleteSecurityLog,
-  listSecurityLogs,
+  listSecurityLoging,  // plural
+  getSecurityLoging, 
 };

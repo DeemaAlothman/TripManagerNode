@@ -28,7 +28,7 @@ app.use(
 app.use(
   cors({
     origin: "http://localhost:5173", // أصل الفرونتند
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS","PUTCH"],
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true, // إذا كنت تستخدم cookies أو توكنات
   })

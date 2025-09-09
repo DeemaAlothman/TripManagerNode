@@ -14,14 +14,15 @@ router.use(verifyAccessToken, checkRole(["booking", "admin"]));
 router.post("/trips", booking.createTrip);
 router.get("/trips", booking.listTrips);
 router.get("/trips/:tripId", booking.getTrip);
-router.patch("/trips/:tripId", booking.updateTrip); // اختياري للتعديل
+router.patch("/trips/:tripId", booking.updateTrip);
 
-/* ======= SEAT MAP (no hold/block) ======= */
+/* ======= SEAT MAP ======= */
 router.get("/trips/:tripId/seat-map", booking.getSeatMap);
-router.get("/trips/:tripId/seats/available", booking.getAvailableSeats); // اختياري
+router.get("/trips/:tripId/seats/available", booking.getAvailableSeats);
 
 /* ========= RESERVATIONS ========= */
 router.post("/reservations", booking.createReservation);
+router.get("/reservations", booking.listAllReservations); // 👈 هيك تمام
 router.get("/trips/:tripId/reservations", booking.listTripReservations);
 router.get("/reservations/:id", booking.getReservation);
 router.patch("/reservations/:id", booking.updateReservation);

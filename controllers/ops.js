@@ -11,6 +11,98 @@ const toId = (x) => {
     return BigInt(parseInt(x, 10) || 0);
   }
 };
+// GET /api/ops/trips/:tripId
+async function getTripById(req, res) {
+  try {
+    // تحقق من صلاحية المستخدم (ops أو admin)
+    if (!req.user || !["ops", "admin"].includes(req.user.role)) {
+      return res.status(403).json({ error: "Only ops users can view trips" });
+    }
+
+    const tripId = req.params.tripId;
+
+    // جلب الرحلة
+    const trip = await prisma.trip.findUnique({
+      where: { id: BigInt(tripId) }, // تحويل id لـ BigInt إذا كانت قاعدة البيانات تستخدم BigInt
+      select: {
+        id: true,
+        originLabel: true,
+        destinationLabel: true,
+        driverName: true,
+        departureDt: true,
+        status: true,
+        busType: { select: { id: true, name: true } },
+        reservations: { select: { id: true } }, // لحساب عدد الركاب
+      },
+    });
+
+    if (!trip) {
+      return res.status(404).json({ message: "Trip not found" });
+    }
+
+    // تحويل البيانات
+    const tripJson = {
+      id: trip.id.toString(),
+      originLabel: trip.originLabel,
+      destinationLabel: trip.destinationLabel,
+      driverName: trip.driverName,
+      departureDt: trip.departureDt ? trip.departureDt.toISOString() : null,
+      status: trip.status,
+      busType: trip.busType
+        ? { id: trip.busType.id.toString(), name: trip.busType.name }
+        : null,
+      passengersCount: trip.reservations.length,
+    };
+
+    res.json(tripJson);
+  } catch (e) {
+    console.error("Error fetching trip:", e);
+    res.status(500).json({ message: "Failed to fetch trip", error: e.message });
+  }
+}
+// GET /api/ops/alltrips
+async function getAllTrips(req, res) {
+  try {
+    // تحقق من صلاحية المستخدم (ops أو admin)
+    if (!req.user || !["ops", "admin"].includes(req.user.role)) {
+      return res.status(403).json({ error: "Only ops users can view trips" });
+    }
+
+    // جلب كل الرحلات
+    const trips = await prisma.trip.findMany({
+      select: {
+        id: true,
+        originLabel: true,
+        destinationLabel: true,
+        driverName: true,
+        departureDt: true,
+        status: true,
+        busType: { select: { id: true, name: true } }, // معلومات نوع الباص
+        reservations: { select: { id: true } }, // نستخدمها لحساب عدد الركاب
+      },
+      orderBy: { departureDt: "asc" }, // ترتيب حسب وقت الانطلاق
+    });
+
+    // تحويل البيانات وإصلاح مشكلة BigInt
+    const tripsJson = trips.map((t) => ({
+      id: t.id.toString(), // تحويل BigInt
+      originLabel: t.originLabel,
+      destinationLabel: t.destinationLabel,
+      driverName: t.driverName,
+      departureDt: t.departureDt ? t.departureDt.toISOString() : null,
+      status: t.status,
+      busType: t.busType
+        ? { id: t.busType.id.toString(), name: t.busType.name }
+        : null,
+      passengersCount: t.reservations.length,
+    }));
+
+    res.json(tripsJson);
+  } catch (e) {
+    console.error("Error fetching trips:", e);
+    res.status(500).json({ message: "Failed to fetch trips", error: e.message });
+  }
+}
 
 // POST /api/ops/trips
 async function createTrip(req, res) {
@@ -708,6 +800,8 @@ async function generateReservationTicketPDF(req, res) {
 
 
 module.exports = {
+  getTripById,
+  getAllTrips,
   createTrip,
   updateTrip,
   deleteTrip,

@@ -16,7 +16,8 @@ router.get(
 
 /** 🔐 كل ما بعده يحتاج توكن ودور ops/admin */
 router.use(verifyAccessToken, checkRole(["ops", "admin"]));
-
+router.get("/trips/:tripId",ops.getTripById);
+router.get("/Alltrips", ops.getAllTrips);
 router.post("/trips", ops.createTrip);
 router.patch("/trips/:tripId", ops.updateTrip);
 router.delete("/trips/:tripId", ops.deleteTrip);

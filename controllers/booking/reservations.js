@@ -100,7 +100,38 @@ async function createReservation(req, res) {
   }
 }
 
+async function listAllReservations(req, res) {
+  try {
+    const items = await prisma.reservation.findMany({
+      orderBy: { id: "asc" },
+      include: {
+        seat: { select: { row: true, col: true } },
+        trip: {
+          select: { id: true, originLabel: true, destinationLabel: true },
+        },
+      },
+    });
 
+    res.json(
+      items.map((r) => ({
+        id: r.id.toString(),
+        tripId: r.trip.id.toString(),
+        route: `${r.trip.originLabel} → ${r.trip.destinationLabel}`,
+        row: r.seat?.row,
+        col: r.seat?.col,
+        passengerName: r.passengerName,
+        phone: r.phone,
+        boardingPoint: r.boardingPoint,
+        paid: r.paid,
+        amount: Number(r.amount ?? 0),
+      }))
+    );
+  } catch (e) {
+    res
+      .status(500)
+      .json({ message: "Error listing reservations", error: e.message });
+  }
+}
 // GET /api/booking/trips/:tripId/reservations
 async function listTripReservations(req, res) {
   try {
@@ -221,6 +252,8 @@ async function deleteReservation(req, res) {
 
 module.exports = {
   createReservation,
+  listAllReservations, // 👈 أضفها هون
+
   listTripReservations,
   getReservation,
   updateReservation,

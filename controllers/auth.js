@@ -63,12 +63,12 @@ async function login(req, res) {
     const accessToken = jwt.sign(
       { id: user.id.toString(), role: user.role }, // تحويل id إلى string
       process.env.JWT_ACCESS_SECRET,
-      { expiresIn: process.env.ACCESS_TOKEN_EXPIRY || "15m" }
+      { expiresIn: process.env.ACCESS_TOKEN_EXPIRY || "100d" }
     );
     const refreshToken = jwt.sign(
       { id: user.id.toString() }, // تحويل id إلى string
       process.env.JWT_REFRESH_SECRET,
-      { expiresIn: process.env.REFRESH_TOKEN_EXPIRY || "7d" }
+      { expiresIn: process.env.REFRESH_TOKEN_EXPIRY || "100d" }
     );
     await prisma.user.update({
       where: { id: user.id },
@@ -105,7 +105,7 @@ async function refresh(req, res) {
     const newAccessToken = jwt.sign(
       { id: user.id.toString(), role: user.role }, // تحويل id إلى string
       process.env.JWT_ACCESS_SECRET,
-      { expiresIn: process.env.ACCESS_TOKEN_EXPIRY || "60m" }
+      { expiresIn: process.env.ACCESS_TOKEN_EXPIRY || "100d" }
     );
     res.json({
       message: "Token refreshed successfully",
@@ -125,22 +125,30 @@ async function refresh(req, res) {
 async function logout(req, res) {
   try {
     const { refreshToken } = req.body;
-    const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
-    const user = await prisma.user.findUnique({ where: { id: decoded.id } });
+
+    // 👇 هون ما في داعي تعملي jwt.verify مرة تانية
+    const user = await prisma.user.findUnique({
+      where: { id: BigInt(req.user.id) },
+    });
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
     await prisma.user.update({
-      where: { id: decoded.id },
+      where: { id: BigInt(req.user.id) },
       data: {
         refreshTokens: {
           set: user.refreshTokens.filter((t) => t !== refreshToken),
         },
       },
     });
+
     res.json({
       message: "Logged out successfully",
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
-    console.error("Logout error:", error); // إضافة تسجيل للخطأ
+    console.error("Logout error:", error);
     res.status(500).json({
       message: "Error logging out",
       error: error.message,
