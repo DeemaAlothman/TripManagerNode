@@ -797,7 +797,25 @@ async function generateReservationTicketPDF(req, res) {
   }
 }
 
+async function getAllBuses(req, res) {
+  try {
+    const buses = await prisma.busType.findMany({
+      include: { seats: true, trips: true },
+    });
 
+    // تحويل كل BigInt إلى String
+    const busesSafe = JSON.parse(
+      JSON.stringify(buses, (_, value) =>
+        typeof value === "bigint" ? value.toString() : value
+      )
+    );
+
+    res.json(busesSafe);
+  } catch (error) {
+    console.error("Error fetching buses:", error);
+    res.status(500).json({ error: "Failed to fetch buses" });
+  }
+}
 
 module.exports = {
   getTripById,
@@ -810,5 +828,6 @@ module.exports = {
   addPassenger,
   generateTripReportPDF,
   generateReservationTicketPDF,
+  getAllBuses,
 };
 

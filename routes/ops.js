@@ -28,7 +28,7 @@ router.get("/trips/:tripId/report.pdf", ops.generateTripReportPDF);
 
 /** ✅ السطر المطلوب: إضافة راكب (اسم فقط، بدون دفع/صعود) */
 router.post("/trips/:tripId/passengers", ops.addPassenger);
-
+router.get("/bus", ops.getAllBuses);
 module.exports = router;
 
 module.exports = router;

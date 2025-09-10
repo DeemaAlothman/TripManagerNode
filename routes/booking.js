@@ -9,7 +9,7 @@ const router = express.Router();
 
 // 🔒 حماية كل المسارات لموظف الحجز المسبق (أو الأدمن)
 router.use(verifyAccessToken, checkRole(["booking", "admin"]));
-
+router.get("/bus",booking.getAllBuses);
 /* ========= TRIPS ========= */
 router.post("/trips", booking.createTrip);
 router.get("/trips", booking.listTrips);
@@ -27,5 +27,4 @@ router.get("/trips/:tripId/reservations", booking.listTripReservations);
 router.get("/reservations/:id", booking.getReservation);
 router.patch("/reservations/:id", booking.updateReservation);
 router.delete("/reservations/:id", booking.deleteReservation);
-
 module.exports = router;

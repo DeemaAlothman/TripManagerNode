@@ -4,7 +4,7 @@ const { PrismaClient, Gender } = require("@prisma/client");
 const prisma = new PrismaClient();
 const { toJSON, getUid } = require("./_utils");
 
-// helper
+// 🔧 Helper: تحويل إلى BigInt
 const toId = (x) => {
   try {
     return BigInt(x);
@@ -13,45 +13,137 @@ const toId = (x) => {
   }
 };
 
-// POST /api/security/logs
-// إنشاء سجل أمني (يمثل تحقق هوية راكب). يتطلب role=security/admin
+/** ===========================================================
+ * 🟢 GET /api/security/security-logs
+ * جلب كل السجلات مع فلترة + Pagination
+ * =========================================================== */
+async function listSecurityLogs(req, res) {
+  try {
+    const {
+      tripId,
+      reservationId,
+      nationalId,
+      from,
+      to,
+      page = "1",
+      pageSize = "50",
+    } = req.query;
+
+    const take = Math.min(parseInt(pageSize) || 50, 200);
+    const skip = (parseInt(page) - 1) * take;
+
+    const where = {};
+    if (tripId) where.tripId = toId(tripId);
+    if (reservationId) where.reservationId = toId(reservationId);
+    if (nationalId)
+      where.nationalId = { contains: nationalId, mode: "insensitive" };
+    if (from || to) {
+      where.recordedAt = {};
+      if (from) where.recordedAt.gte = new Date(from);
+      if (to) where.recordedAt.lte = new Date(to);
+    }
+
+    const [items, total] = await Promise.all([
+      prisma.securityLog.findMany({
+        where,
+        orderBy: { recordedAt: "desc" },
+        skip,
+        take,
+        include: {
+          recorder: { select: { id: true, name: true, role: true } },
+          trip: {
+            select: {
+              id: true,
+              departureDt: true,
+              originLabel: true,
+              destinationLabel: true,
+            },
+          },
+          reservation: { select: { id: true } },
+        },
+      }),
+      prisma.securityLog.count({ where }),
+    ]);
+
+    res.json({
+      total,
+      page: Number(page),
+      pageSize: take,
+      items: toJSON(items),
+    });
+  } catch (e) {
+    res
+      .status(500)
+      .json({ message: "Error listing security logs", error: e.message });
+  }
+}
+
+/** ===========================================================
+ * 🟢 GET /api/security/security-logs/:id
+ * جلب سجل واحد
+ * =========================================================== */
+async function getSecurityLog(req, res) {
+  try {
+    const id = toId(req.params.id);
+    const log = await prisma.securityLog.findUnique({
+      where: { id },
+      include: {
+        recorder: { select: { id: true, name: true, role: true } },
+        trip: {
+          select: {
+            id: true,
+            departureDt: true,
+            originLabel: true,
+            destinationLabel: true,
+          },
+        },
+        reservation: { select: { id: true } },
+      },
+    });
+
+    if (!log) return res.status(404).json({ message: "Not found" });
+    res.json(toJSON(log));
+  } catch (e) {
+    res
+      .status(500)
+      .json({ message: "Error fetching security log", error: e.message });
+  }
+}
+
+/** ===========================================================
+ * 🟢 POST /api/security/logs
+ * إنشاء سجل جديد
+ * =========================================================== */
 async function createSecurityLog(req, res) {
   try {
     const {
       tripId,
-      reservationId, // اختياري (قد يكون الراكب بدون حجز)
+      reservationId,
       nationalId,
       firstName,
       lastName,
       fatherName,
       motherName,
-      birthDate, // ISO string
+      birthDate,
       gender, // "M" | "F"
       issuePlace,
       phone,
       notes,
     } = req.body;
 
-    // التحقق من الحقول الأساسية
     if (!tripId || !nationalId || !firstName || !lastName || !gender) {
-      return res
-        .status(400)
-        .json({
-          message:
-            "tripId, nationalId, firstName, lastName, gender are required",
-        });
+      return res.status(400).json({
+        message: "tripId, nationalId, firstName, lastName, gender are required",
+      });
     }
 
-    // هوية المسجّل من JWT
     const uid = getUid(req);
     if (!uid) return res.status(401).json({ message: "Unauthorized" });
 
-    // تحقّق من الرحلة
     const tripPk = toId(tripId);
     const trip = await prisma.trip.findUnique({ where: { id: tripPk } });
     if (!trip) return res.status(404).json({ message: "Trip not found" });
 
-    // التحقق من الحجز (إن وُجد) وأنه لنفس الرحلة (اختياري لكن مفيد)
     let reservationConnect = undefined;
     if (reservationId) {
       const rId = toId(reservationId);
@@ -63,28 +155,21 @@ async function createSecurityLog(req, res) {
       if (r.trip?.id?.toString() !== tripPk.toString()) {
         return res
           .status(400)
-          .json({
-            message: "Reservation does not belong to the specified trip",
-          });
+          .json({ message: "Reservation does not belong to this trip" });
       }
       reservationConnect = { connect: { id: rId } };
     }
 
-    // Gender enum
-    let genderEnum = undefined;
+    let genderEnum;
     if (gender === "M") genderEnum = Gender.M;
     else if (gender === "F") genderEnum = Gender.F;
-    else
-      return res
-        .status(400)
-        .json({ message: "Invalid gender, use 'M' or 'F'" });
+    else return res.status(400).json({ message: "Invalid gender" });
 
-    // إنشاء السجل عبر العلاقات
     const log = await prisma.securityLog.create({
       data: {
-        trip: { connect: { id: tripPk } }, // علاقة مطلوبة
-        reservation: reservationConnect ?? undefined, // علاقة اختيارية
-        recorder: { connect: { id: uid } }, // المستخدم من التوكن
+        trip: { connect: { id: tripPk } },
+        reservation: reservationConnect ?? undefined,
+        recorder: { connect: { id: uid } },
         nationalId,
         firstName,
         lastName,
@@ -95,7 +180,6 @@ async function createSecurityLog(req, res) {
         issuePlace: issuePlace ?? null,
         phone: phone ?? null,
         notes: notes ?? null,
-        // recordedAt: new Date(), // لو ما عندك default(now()) في السكيمة
       },
     });
 
@@ -107,12 +191,14 @@ async function createSecurityLog(req, res) {
   }
 }
 
-// PATCH /api/security/logs/:id
+/** ===========================================================
+ * 🟢 PATCH /api/security/logs/:id
+ * تحديث سجل
+ * =========================================================== */
 async function updateSecurityLog(req, res) {
   try {
     const id = toId(req.params.id);
     const {
-      // لا نسمح بتغيير trip/reservation من هنا غالبًا
       nationalId,
       firstName,
       lastName,
@@ -132,8 +218,7 @@ async function updateSecurityLog(req, res) {
     if (!log)
       return res.status(404).json({ message: "Security log not found" });
 
-    // gender enum (اختياري)
-    let genderEnum = undefined;
+    let genderEnum;
     if (gender !== undefined) {
       if (gender === "M") genderEnum = Gender.M;
       else if (gender === "F") genderEnum = Gender.F;
@@ -153,10 +238,6 @@ async function updateSecurityLog(req, res) {
     if (phone !== undefined) data.phone = phone ?? null;
     if (notes !== undefined) data.notes = notes ?? null;
 
-    if (Object.keys(data).length === 0) {
-      return res.status(400).json({ message: "No fields to update" });
-    }
-
     const updated = await prisma.securityLog.update({ where: { id }, data });
     res.json(toJSON(updated));
   } catch (e) {
@@ -166,11 +247,13 @@ async function updateSecurityLog(req, res) {
   }
 }
 
-// DELETE /api/security/logs/:id
+/** ===========================================================
+ * 🟢 DELETE /api/security/logs/:id
+ * حذف سجل
+ * =========================================================== */
 async function deleteSecurityLog(req, res) {
   try {
     const id = toId(req.params.id);
-
     const uid = getUid(req);
     if (!uid) return res.status(401).json({ message: "Unauthorized" });
 
@@ -187,64 +270,35 @@ async function deleteSecurityLog(req, res) {
   }
 }
 
-// GET /api/security/logs?tripId=1&date=2025-08-27
-// يعرض السجلات مع فلترة حسب الرحلة واليوم (اختياريين)
-async function listSecurityLoging(req, res) {
+async function getAllTrips(req, res) {
   try {
-    const { tripId, date } = req.query;
-    const where = {};
-
-    if (tripId) where.trip = { id: toId(tripId) }; // علاقة
-    if (date) {
-      // نطاق اليوم: [00:00, 23:59:59]
-      const d = new Date(date + "T00:00:00");
-      const next = new Date(d);
-      next.setDate(next.getDate() + 1);
-      where.recordedAt = { gte: d, lt: next };
-    }
-
-    const logs = await prisma.securityLog.findMany({
-      where,
-      orderBy: { recordedAt: "desc" },
-      include: {
-        recorder: { select: { id: true, name: true, role: true } },
-        trip: {
-          select: {
-            id: true,
-            departureDt: true,
-            originLabel: true,
-            destinationLabel: true,
-          },
-        },
-        reservation: { select: { id: true } },
+    const trips = await prisma.trip.findMany({
+      select: {
+        id: true,
+        originLabel: true,
+        destinationLabel: true,
+        departureDt: true,
       },
     });
 
-    res.json(toJSON(logs));
-  } catch (e) {
-    res
-      .status(500)
-      .json({ message: "Failed to fetch security logs", error: e.message });
+    // تحويل BigInt إلى string لتجنب JSON.stringify error
+    const tripsSafe = JSON.parse(
+      JSON.stringify(trips, (_, value) =>
+        typeof value === "bigint" ? value.toString() : value
+      )
+    );
+
+    res.json(tripsSafe);
+  } catch (error) {
+    console.error("Error fetching trips:", error);
+    res.status(500).json({ error: "Failed to fetch trips" });
   }
 }
-async function getSecurityLoging(req, res) {
-  try {
-    const id = BigInt(req.params.id);
-    const log = await prisma.securityLog.findUnique({ where: { id } });
-    if (!log) return res.status(404).json({ message: "Not found" });
-    res.json(toJSON(log));
-  } catch (e) {
-    res
-      .status(500)
-      .json({ message: "Error fetching security log", error: e.message });
-  }
-}
-
-
 module.exports = {
+  listSecurityLogs,
+  getSecurityLog,
   createSecurityLog,
   updateSecurityLog,
   deleteSecurityLog,
-  listSecurityLoging,  // plural
-  getSecurityLoging, 
+  getAllTrips,
 };

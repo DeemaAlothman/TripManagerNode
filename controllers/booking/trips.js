@@ -9,7 +9,25 @@ const toId = (x) => {
     return BigInt(parseInt(x, 10) || 0);
   }
 };
+async function getAllBuses(req, res) {
+  try {
+    const buses = await prisma.busType.findMany({
+      include: { seats: true, trips: true },
+    });
 
+    // تحويل كل BigInt إلى String
+    const busesSafe = JSON.parse(
+      JSON.stringify(buses, (_, value) =>
+        typeof value === "bigint" ? value.toString() : value
+      )
+    );
+
+    res.json(busesSafe);
+  } catch (error) {
+    console.error("Error fetching buses:", error);
+    res.status(500).json({ error: "Failed to fetch buses" });
+  }
+}
 // POST /api/booking/trips
 async function createTrip(req, res) {
   try {
@@ -140,5 +158,5 @@ async function updateTrip(req, res) {
   }
 }
 
-module.exports = { createTrip, listTrips, getTrip, updateTrip };
+module.exports = { createTrip, listTrips, getTrip, updateTrip, getAllBuses };
 

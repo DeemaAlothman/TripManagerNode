@@ -1,3 +1,4 @@
+// routes/securityRoutes.js
 const express = require("express");
 const router = express.Router();
 
@@ -7,19 +8,14 @@ const {
   checkRole,
 } = require("../controllers/middleware/auth");
 
-/** 🔓 مسارات عامة (مفتوحة للـ admin والـ security) */
-router.get("/security-logs", security.listSecurityLoging);
-router.get("/security-logs/:id", security.getSecurityLoging);
+/** 🔓 مسارات عامة (للعرض فقط) */
+router.get("/security-logs", security.listSecurityLogs);
+router.get("/security-logs/:id", security.getSecurityLog);
 
-// 🟢 alias لمسارات الأدمن عشان ما يفرق الكود بالفرونت
-// router.get("/admin/security-logs", security.listSecurityLoging);
-// router.get("/admin/security-logs/:id", security.getSecurityLoging);
-
-/** 🔐 المسارات اللي بتحتاج كتابة/تعديل/حذف */
+/** 🔐 مسارات محمية (إنشاء/تعديل/حذف) */
 router.use(verifyAccessToken, checkRole(["security", "admin"]));
-
 router.post("/logs", security.createSecurityLog);
 router.patch("/logs/:id", security.updateSecurityLog);
 router.delete("/logs/:id", security.deleteSecurityLog);
-
+router.get("/trips", security.getAllTrips);
 module.exports = router;
