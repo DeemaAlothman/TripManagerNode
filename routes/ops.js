@@ -25,7 +25,7 @@ router.delete("/trips/:tripId", ops.deleteTrip);
 router.get("/trips/:tripId/passengers", ops.getTripPassengers);
 router.get("/trips/:tripId/payments-summary", ops.getTripPaymentsSummary);
 router.get("/trips/:tripId/report.pdf", ops.generateTripReportPDF);
-
+router.get("/trips/:tripId/steat", ops.getSeatMap);
 /** ✅ السطر المطلوب: إضافة راكب (اسم فقط، بدون دفع/صعود) */
 router.post("/trips/:tripId/passengers", ops.addPassenger);
 router.get("/bus", ops.getAllBuses);

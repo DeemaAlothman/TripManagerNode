@@ -60,29 +60,39 @@ async function login(req, res) {
         timestamp: new Date().toISOString(),
       });
     }
+
     const accessToken = jwt.sign(
-      { id: user.id.toString(), role: user.role }, // تحويل id إلى string
+      { id: user.id.toString(), role: user.role },
       process.env.JWT_ACCESS_SECRET,
       { expiresIn: process.env.ACCESS_TOKEN_EXPIRY || "100d" }
     );
+
     const refreshToken = jwt.sign(
-      { id: user.id.toString() }, // تحويل id إلى string
+      { id: user.id.toString() },
       process.env.JWT_REFRESH_SECRET,
       { expiresIn: process.env.REFRESH_TOKEN_EXPIRY || "100d" }
     );
+
     await prisma.user.update({
       where: { id: user.id },
       data: { refreshTokens: { push: refreshToken } },
     });
+
+    // ✅ تعديل الرد: رجّع بيانات المستخدم
     res.json({
       message: "Login successful",
       accessToken,
       refreshToken,
       role: user.role,
+      user: {
+        id: user.id.toString(),
+        name: user.name,
+        phone: user.phone,
+      },
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
-    console.error("Login error:", error); // إضافة تسجيل للخطأ
+    console.error("Login error:", error);
     res.status(500).json({
       message: "Error logging in",
       error: error.message,
